@@ -12,6 +12,50 @@ const port = process.env.PORT || 3000;
 const uploadDir = './uploads';  // Local development
 const maxFileSize = parseInt(process.env.MAX_FILE_SIZE || '1024') * 1024 * 1024; // Convert MB to bytes
 
+// Brute force protection setup
+const loginAttempts = new Map();  // Stores IP addresses and their attempt counts
+const MAX_ATTEMPTS = 5;           // Maximum allowed attempts
+const LOCKOUT_TIME = 15 * 60 * 1000; // 15 minutes in milliseconds
+
+// Reset attempts for an IP
+function resetAttempts(ip) {
+    loginAttempts.delete(ip);
+}
+
+// Check if an IP is locked out
+function isLockedOut(ip) {
+    const attempts = loginAttempts.get(ip);
+    if (!attempts) return false;
+    
+    if (attempts.count >= MAX_ATTEMPTS) {
+        const timeElapsed = Date.now() - attempts.lastAttempt;
+        if (timeElapsed < LOCKOUT_TIME) {
+            return true;
+        }
+        resetAttempts(ip);
+    }
+    return false;
+}
+
+// Record an attempt for an IP
+function recordAttempt(ip) {
+    const attempts = loginAttempts.get(ip) || { count: 0, lastAttempt: 0 };
+    attempts.count += 1;
+    attempts.lastAttempt = Date.now();
+    loginAttempts.set(ip, attempts);
+    return attempts;
+}
+
+// Cleanup old lockouts every minute
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, attempts] of loginAttempts.entries()) {
+        if (now - attempts.lastAttempt >= LOCKOUT_TIME) {
+            loginAttempts.delete(ip);
+        }
+    }
+}, 60000);
+
 // Validate and set PIN
 const validatePin = (pin) => {
     if (!pin) return null;
@@ -78,14 +122,27 @@ function safeCompare(a, b) {
 // Pin verification endpoint
 app.post('/api/verify-pin', (req, res) => {
     const { pin } = req.body;
+    const ip = req.ip;
     
     // If no PIN is set in env, always return success
     if (!PIN) {
         return res.json({ success: true });
     }
 
+    // Check for lockout
+    if (isLockedOut(ip)) {
+        const attempts = loginAttempts.get(ip);
+        const timeLeft = Math.ceil((LOCKOUT_TIME - (Date.now() - attempts.lastAttempt)) / 1000 / 60);
+        return res.status(429).json({ 
+            error: `Too many attempts. Please try again in ${timeLeft} minutes.`
+        });
+    }
+
     // Verify the PIN using constant-time comparison
     if (safeCompare(pin, PIN)) {
+        // Reset attempts on successful login
+        resetAttempts(ip);
+        
         // Set secure cookie
         res.cookie('DUMBDROP_PIN', pin, {
             httpOnly: true,
@@ -95,7 +152,16 @@ app.post('/api/verify-pin', (req, res) => {
         });
         res.json({ success: true });
     } else {
-        res.status(401).json({ success: false, error: 'Invalid PIN' });
+        // Record failed attempt
+        const attempts = recordAttempt(ip);
+        const attemptsLeft = MAX_ATTEMPTS - attempts.count;
+        
+        res.status(401).json({ 
+            success: false, 
+            error: attemptsLeft > 0 ? 
+                `Invalid PIN. ${attemptsLeft} attempts remaining.` : 
+                'Too many attempts. Account locked for 15 minutes.'
+        });
     }
 });
 

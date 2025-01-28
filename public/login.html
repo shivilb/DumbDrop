@@ -41,6 +41,16 @@
         .error-message {
             text-align: center;
             margin-top: 1rem;
+            color: var(--danger-color);
+            max-width: 300px;
+            line-height: 1.4;
+        }
+
+        .pin-digit.locked {
+            opacity: 0.5;
+            cursor: not-allowed;
+            border-color: var(--danger-color);
+            background-color: var(--textarea-bg);
         }
     </style>
 </head>
@@ -125,13 +135,25 @@
                 if (data.success) {
                     window.location.href = '/';
                 } else {
-                    document.getElementById('pin-error').textContent = 'Invalid PIN';
-                    const inputs = [...document.querySelectorAll('.pin-digit')];
-                    inputs.forEach(input => {
-                        input.value = '';
-                        input.classList.remove('filled');
-                    });
-                    inputs[0].focus();
+                    // Show error message
+                    document.getElementById('pin-error').textContent = data.error;
+                    
+                    // Only clear inputs and focus if not locked out
+                    if (!data.error.includes('try again in')) {
+                        const inputs = [...document.querySelectorAll('.pin-digit')];
+                        inputs.forEach(input => {
+                            input.value = '';
+                            input.classList.remove('filled');
+                        });
+                        inputs[0].focus();
+                    } else {
+                        // If locked out, disable all inputs
+                        const inputs = [...document.querySelectorAll('.pin-digit')];
+                        inputs.forEach(input => {
+                            input.disabled = true;
+                            input.classList.add('locked');
+                        });
+                    }
                 }
             } catch (err) {
                 console.error('Error verifying PIN:', err);
