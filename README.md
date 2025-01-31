@@ -76,14 +76,14 @@ npm start
 #### Pull from Docker Hub
 ```bash
 # Pull the image
-docker pull abite3/dumbdrop:latest
+docker pull dumbwareio/dumbdrop:latest
 
 # Run the container
 # For Linux/Mac:
-docker run -p 3000:3000 -v $(pwd)/local_uploads:/app/uploads -e DUMBDROP_PIN=123456 abite3/dumbdrop:latest
+docker run -p 3000:3000 -v $(pwd)/local_uploads:/app/uploads -e DUMBDROP_PIN=123456 dumbwareio/dumbdrop:latest
 
 # For Windows PowerShell:
-docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" -e DUMBDROP_PIN=123456 abite3/dumbdrop:latest
+docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" -e DUMBDROP_PIN=123456 dumbwareio/dumbdrop:latest
 ```
 
 # Docker Compose
@@ -99,7 +99,7 @@ services:
             - DUMBDROP_PIN=123456
             # - APPRISE_URL=          # i.e. tgram://bottoken/ChatID
             # - APPRISE_MESSAGE= 
-        image: abite3/dumbdrop:latest
+        image: dumbwareio/dumbdrop:latest
 ```
 
 #### Build Locally
