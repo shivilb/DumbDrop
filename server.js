@@ -16,6 +16,7 @@ const uploadDir = './uploads';  // Local development
 const maxFileSize = parseInt(process.env.MAX_FILE_SIZE || '1024') * 1024 * 1024; // Convert MB to bytes
 const APPRISE_URL = process.env.APPRISE_URL;
 const APPRISE_MESSAGE = process.env.APPRISE_MESSAGE || 'File uploaded: {filename}';
+const siteTitle = process.env.DUMBDROP_TITLE || 'DumbDrop';
 
 // Brute force protection setup
 const loginAttempts = new Map();  // Stores IP addresses and their attempt counts
@@ -191,42 +192,28 @@ const requirePin = (req, res, next) => {
     next();
 };
 
-// Apply pin protection to all /upload routes
-app.use('/upload', requirePin);
-
-// Serve login page and its assets without PIN check
-app.use((req, res, next) => {
-    if (req.path === '/login.html' || req.path === '/styles.css' || req.path.startsWith('/api/')) {
-        return next();
-    }
-
-    // Check PIN requirement
-    if (!PIN) {
-        return next();
-    }
-
-    // Check cookie
-    const providedPin = req.cookies.DUMBDROP_PIN;
-    if (!safeCompare(providedPin, PIN)) {
-        // If requesting HTML or root, redirect to login
-        if (req.path === '/' || req.path.endsWith('.html')) {
-            return res.redirect('/login.html');
-        }
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-    next();
-});
-
-// Serve static files
-app.use(express.static('public'));
-
-// Handle root route
+// Move the root and login routes before static file serving
 app.get('/', (req, res) => {
     if (PIN && !safeCompare(req.cookies.DUMBDROP_PIN, PIN)) {
         return res.redirect('/login.html');
     }
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    // Read the file and replace the title
+    let html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+    html = html.replace(/{{SITE_TITLE}}/g, siteTitle);  // Use global replace
+    res.send(html);
 });
+
+app.get('/login.html', (req, res) => {
+    let html = fs.readFileSync(path.join(__dirname, 'public', 'login.html'), 'utf8');
+    html = html.replace(/{{SITE_TITLE}}/g, siteTitle);  // Use global replace
+    res.send(html);
+});
+
+// Move static file serving after our dynamic routes
+app.use(express.static('public'));
+
+// PIN protection middleware should be before the routes that need protection
+app.use('/upload', requirePin);
 
 // Store ongoing uploads
 const uploads = new Map();
@@ -335,11 +322,14 @@ app.listen(port, () => {
     log.info(`Server running at http://localhost:${port}`);
     log.info(`Upload directory: ${uploadDir}`);
     
+    // Log custom title if set
+    if (process.env.DUMBDROP_TITLE) {
+        log.info(`Custom title set to: ${siteTitle}`);
+    }
+    
     // Add Apprise configuration logging
     if (APPRISE_URL) {
-        log.info(`Apprise notifications enabled`);
-        log.info(`Apprise URL: ${APPRISE_URL}`);
-        log.info(`Apprise message template: ${APPRISE_MESSAGE}`);
+        log.info('Apprise notifications enabled');
     } else {
         log.info('Apprise notifications disabled - no URL configured');
     }
