@@ -28,8 +28,9 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 | PORT         | Server port                           | 3000    | No       |
 | MAX_FILE_SIZE| Maximum file size in MB               | 1024    | No       |
 | DUMBDROP_PIN | PIN protection (4-10 digits)          | None    | No       |
+| DUMBDROP_TITLE| Site title displayed in header       | DumbDrop| No       |
 | APPRISE_URL  | Apprise URL for notifications         | None    | No       |
-| APPRISE_MESSAGE| Notification message template         | "File uploaded: {filename}" | No |
+| APPRISE_MESSAGE| Notification message template       | "File uploaded: {filename}" | No |
 
 ## Security Features
 
