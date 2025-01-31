@@ -18,6 +18,8 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 - Configurable file size limits
 - Drag and Drop Directory Support (Maintains file structure in upload)
 - Optional PIN protection (4-10 digits) with secure validation
+- Configurable notifications via Apprise
+- Custom notification messages with filename templating
 
 ## Environment Variables
 
@@ -26,6 +28,8 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 | PORT         | Server port                           | 3000    | No       |
 | MAX_FILE_SIZE| Maximum file size in MB               | 1024    | No       |
 | DUMBDROP_PIN | PIN protection (4-10 digits)          | None    | No       |
+| APPRISE_URL  | Apprise URL for notifications         | None    | No       |
+| APPRISE_MESSAGE| Notification message template         | "File uploaded: {filename}" | No |
 
 ## Security Features
 
@@ -34,6 +38,12 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 - Automatic input sanitization
 - Secure PIN validation middleware
 - No PIN storage in browser (memory only)
+
+## Notification Support
+- Integration with [Apprise](https://github.com/caronc/apprise?tab=readme-ov-file#supported-notifications) for flexible notifications
+- Support for all Apprise notification services
+- Customizable notification messages with filename templating
+- Optional - disabled if no APPRISE_URL is set
 
 # Future Features
 - Camera Upload for Mobile
@@ -87,6 +97,8 @@ services:
             - $(pwd)/local_uploads:/app/uploads
         environment:
             - DUMBDROP_PIN=123456
+            # - APPRISE_URL=          # i.e. tgram://bottoken/ChatID
+            # - APPRISE_MESSAGE= 
         image: abite3/dumbdrop:latest
 ```
 
