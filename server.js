@@ -15,7 +15,7 @@ const port = process.env.PORT || 3000;
 const uploadDir = './uploads';  // Local development
 const maxFileSize = parseInt(process.env.MAX_FILE_SIZE || '1024') * 1024 * 1024; // Convert MB to bytes
 const APPRISE_URL = process.env.APPRISE_URL;
-const APPRISE_MESSAGE = process.env.APPRISE_MESSAGE || 'New file uploaded: {filename} ({size})';
+const APPRISE_MESSAGE = process.env.APPRISE_MESSAGE || 'New file uploaded - {filename} ({size}), Storage used: {storage}';
 const siteTitle = process.env.DUMBDROP_TITLE || 'DumbDrop';
 const APPRISE_SIZE_UNIT = process.env.APPRISE_SIZE_UNIT;
 
@@ -373,18 +373,37 @@ function formatFileSize(bytes) {
     return size.toFixed(2) + units[unitIndex];
 }
 
+// Add this helper function
+function calculateDirectorySize(directoryPath) {
+    let totalSize = 0;
+    const files = fs.readdirSync(directoryPath);
+    
+    files.forEach(file => {
+        const filePath = path.join(directoryPath, file);
+        const stats = fs.statSync(filePath);
+        if (stats.isFile()) {
+            totalSize += stats.size;
+        }
+    });
+    
+    return totalSize;
+}
+
+// Modify the sendNotification function
 async function sendNotification(filename, fileSize) {
     if (!APPRISE_URL) return;
 
     try {
-        const formattedSize = formatFileSize(fileSize);  // No await needed here
+        const formattedSize = formatFileSize(fileSize);
+        const totalStorage = formatFileSize(calculateDirectorySize(uploadDir));
         const message = APPRISE_MESSAGE
             .replace('{filename}', filename)
-            .replace('{size}', formattedSize);
+            .replace('{size}', formattedSize)
+            .replace('{storage}', totalStorage);
         
         // Execute apprise command
         await execAsync(`apprise "${APPRISE_URL}" -b "${message}"`);
-        log.info(`Notification sent for: ${filename} (${formattedSize})`);
+        log.info(`Notification sent for: ${filename} (${formattedSize}, Total storage: ${totalStorage})`);
     } catch (err) {
         log.error(`Failed to send notification: ${err.message}`);
     }

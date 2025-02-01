@@ -6,7 +6,11 @@ services:
         volumes:
             - ./local_uploads:/app/uploads
         environment:
-            - DUMBDROP_PIN=123456
-            - APPRISE_URL=          # i.e. tgram://bottoken/ChatID
-            - APPRISE_MESSAGE=      # dont add quotes here
+            DUMBDROP_TITLE: DumbDrop fo shizzle
+            MAX_FILE_SIZE: 1024
+            DUMBDROP_PIN: 123456
+            # APPRISE_URL: ntfys://
+            APPRISE_MESSAGE: New file uploaded - {filename} ({size}), Storage used {storage} 
+            APPRISE_SIZE_UNIT: auto
         image: abite3/dumbdrop:latest
+        # build: .

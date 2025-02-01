@@ -30,22 +30,25 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 | DUMBDROP_PIN     | PIN protection (4-10 digits)          | None    | No       |
 | DUMBDROP_TITLE   | Site title displayed in header        | DumbDrop| No       |
 | APPRISE_URL      | Apprise URL for notifications         | None    | No       |
-| APPRISE_MESSAGE  | Notification message template         | "New file uploaded: {filename} ({size})" | No |
+| APPRISE_MESSAGE  | Notification message template         | New file uploaded {filename} ({size}), Storage used {storage} | No |
 | APPRISE_SIZE_UNIT| Size unit for notifications           | Auto    | No       |
 
 ## Notification Templates
 The notification message supports the following placeholders:
 - `{filename}`: Name of the uploaded file
 - `{size}`: Size of the file (formatted according to APPRISE_SIZE_UNIT)
+- `{storage}`: Total size of all files in upload directory
 
 Example message template:
 ```env
-APPRISE_MESSAGE="New file uploaded: {filename} ({size})"
+APPRISE_MESSAGE: New file uploaded {filename} ({size}), Storage used {storage}
 ```
 
 Size formatting examples:
 - Auto (default): Chooses nearest unit (e.g., "1.44MB", "256KB")
 - Fixed unit: Set APPRISE_SIZE_UNIT to B, KB, MB, GB, or TB
+
+Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UNIT.
 
 ## Security Features
 
