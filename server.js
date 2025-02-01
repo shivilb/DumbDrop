@@ -15,8 +15,9 @@ const port = process.env.PORT || 3000;
 const uploadDir = './uploads';  // Local development
 const maxFileSize = parseInt(process.env.MAX_FILE_SIZE || '1024') * 1024 * 1024; // Convert MB to bytes
 const APPRISE_URL = process.env.APPRISE_URL;
-const APPRISE_MESSAGE = process.env.APPRISE_MESSAGE || 'File uploaded: {filename}';
+const APPRISE_MESSAGE = process.env.APPRISE_MESSAGE || 'New file uploaded: {filename} ({size})';
 const siteTitle = process.env.DUMBDROP_TITLE || 'DumbDrop';
+const APPRISE_SIZE_UNIT = process.env.APPRISE_SIZE_UNIT;
 
 // Brute force protection setup
 const loginAttempts = new Map();  // Stores IP addresses and their attempt counts
@@ -259,7 +260,7 @@ app.post('/upload/init', async (req, res) => {
 app.post('/upload/chunk/:uploadId', express.raw({ 
     limit: '10mb', 
     type: 'application/octet-stream' 
-}), (req, res) => {
+}), async (req, res) => {
     const { uploadId } = req.params;
     const upload = uploads.get(uploadId);
     const chunkSize = req.body.length;
@@ -273,7 +274,7 @@ app.post('/upload/chunk/:uploadId', express.raw({
         upload.bytesReceived += chunkSize;
 
         const progress = Math.round((upload.bytesReceived / upload.fileSize) * 100);
-        log.info(`Received chunk for ${upload.filename}: ${progress}%`);
+        log.info(`Received chunk for ${upload.safeFilename}: ${progress}%`);
 
         res.json({ 
             bytesReceived: upload.bytesReceived,
@@ -284,10 +285,10 @@ app.post('/upload/chunk/:uploadId', express.raw({
         if (upload.bytesReceived >= upload.fileSize) {
             upload.writeStream.end();
             uploads.delete(uploadId);
-            log.success(`Upload completed: ${upload.filename}`);
+            log.success(`Upload completed: ${upload.safeFilename}`);
             
-            // Add notification here
-            sendNotification(upload.filename);
+            // Update notification call to use safeFilename
+            await sendNotification(upload.safeFilename, upload.fileSize);
         }
     } catch (err) {
         log.error(`Chunk upload failed: ${err.message}`);
@@ -305,7 +306,7 @@ app.post('/upload/cancel/:uploadId', (req, res) => {
             if (err) log.error(`Failed to delete incomplete upload: ${err.message}`);
         });
         uploads.delete(uploadId);
-        log.info(`Upload cancelled: ${upload.filename}`);
+        log.info(`Upload cancelled: ${upload.safeFilename}`);
     }
 
     res.json({ message: 'Upload cancelled' });
@@ -346,16 +347,44 @@ app.listen(port, () => {
     }
 });
 
-// Add this helper function after other helper functions
-async function sendNotification(filename) {
+// Remove async from formatFileSize function
+function formatFileSize(bytes) {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let size = bytes;
+    let unitIndex = 0;
+
+    // If a specific unit is requested
+    if (APPRISE_SIZE_UNIT) {
+        const requestedUnit = APPRISE_SIZE_UNIT.toUpperCase();
+        const unitIndex = units.indexOf(requestedUnit);
+        if (unitIndex !== -1) {
+            size = bytes / Math.pow(1024, unitIndex);
+            return size.toFixed(2) + requestedUnit;
+        }
+    }
+
+    // Auto format to nearest unit
+    while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex++;
+    }
+
+    // Round to 2 decimal places
+    return size.toFixed(2) + units[unitIndex];
+}
+
+async function sendNotification(filename, fileSize) {
     if (!APPRISE_URL) return;
 
     try {
-        const message = APPRISE_MESSAGE.replace('{filename}', filename);
+        const formattedSize = formatFileSize(fileSize);  // No await needed here
+        const message = APPRISE_MESSAGE
+            .replace('{filename}', filename)
+            .replace('{size}', formattedSize);
         
         // Execute apprise command
         await execAsync(`apprise "${APPRISE_URL}" -b "${message}"`);
-        log.info(`Notification sent for: ${filename}`);
+        log.info(`Notification sent for: ${filename} (${formattedSize})`);
     } catch (err) {
         log.error(`Failed to send notification: ${err.message}`);
     }
