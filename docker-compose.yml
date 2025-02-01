@@ -6,7 +6,7 @@ services:
         volumes:
             - ./local_uploads:/app/uploads
         environment:
-            DUMBDROP_TITLE: DumbDrop fo shizzle
+            DUMBDROP_TITLE: DumbDrop
             MAX_FILE_SIZE: 1024
             DUMBDROP_PIN: 123456
             # APPRISE_URL: ntfys://
