@@ -133,7 +133,10 @@ app.use((req, res, next) => {
     // Content Security Policy
     res.setHeader(
         'Content-Security-Policy',
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';"
+        "default-src 'self'; " +
+        "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net; " +
+        "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; " +
+        "img-src 'self' data: blob:;"
     );
     // X-Content-Type-Options
     res.setHeader('X-Content-Type-Options', 'nosniff');
