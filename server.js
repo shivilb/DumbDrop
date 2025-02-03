@@ -10,6 +10,9 @@ const util = require('util');
 const execAsync = util.promisify(exec);
 require('dotenv').config();
 
+// Rate limiting setup
+const rateLimit = require('express-rate-limit');
+
 const app = express();
 const port = process.env.PORT || 3000;
 const uploadDir = './uploads';  // Local development
@@ -18,6 +21,23 @@ const APPRISE_URL = process.env.APPRISE_URL;
 const APPRISE_MESSAGE = process.env.APPRISE_MESSAGE || 'New file uploaded - {filename} ({size}), Storage used: {storage}';
 const siteTitle = process.env.DUMBDROP_TITLE || 'DumbDrop';
 const APPRISE_SIZE_UNIT = process.env.APPRISE_SIZE_UNIT;
+
+// Configure rate limiters
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: 'Too many requests from this IP, please try again later'
+});
+
+const uploadLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 50, // Limit each IP to 50 upload requests per hour
+    message: 'Upload limit exceeded, please try again later'
+});
+
+// Apply rate limiting to all API routes
+app.use('/api/', apiLimiter);
+app.use('/upload/', uploadLimiter);
 
 // Brute force protection setup
 const loginAttempts = new Map();  // Stores IP addresses and their attempt counts
@@ -112,6 +132,26 @@ try {
 app.use(cors());
 app.use(cookieParser());
 app.use(express.json());
+
+// Security headers middleware
+app.use((req, res, next) => {
+    // Content Security Policy
+    res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';"
+    );
+    // X-Content-Type-Options
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // X-Frame-Options
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    // X-XSS-Protection
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    // Strict Transport Security (when in production)
+    if (process.env.NODE_ENV === 'production') {
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+});
 
 // Helper function for constant-time string comparison
 function safeCompare(a, b) {
@@ -223,7 +263,23 @@ const uploads = new Map();
 app.post('/upload/init', async (req, res) => {
     const { filename, fileSize } = req.body;
 
-    const safeFilename = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '')
+    const safeFilename = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
+    
+    // Validate file extension
+    const allowedExtensions = process.env.ALLOWED_EXTENSIONS ? 
+        process.env.ALLOWED_EXTENSIONS.split(',').map(ext => ext.trim().toLowerCase()) : 
+        null;
+    
+    if (allowedExtensions) {
+        const fileExt = path.extname(safeFilename).toLowerCase();
+        if (!allowedExtensions.includes(fileExt)) {
+            log.error(`File type ${fileExt} not allowed`);
+            return res.status(400).json({ 
+                error: 'File type not allowed',
+                allowedExtensions
+            });
+        }
+    }
     
     // Check file size limit
     if (fileSize > maxFileSize) {
