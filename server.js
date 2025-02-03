@@ -22,22 +22,17 @@ const APPRISE_MESSAGE = process.env.APPRISE_MESSAGE || 'New file uploaded - {fil
 const siteTitle = process.env.DUMBDROP_TITLE || 'DumbDrop';
 const APPRISE_SIZE_UNIT = process.env.APPRISE_SIZE_UNIT;
 
-// Configure rate limiters
-const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
-    message: 'Too many requests from this IP, please try again later'
-});
+// Update the chunk size and rate limits
+const CHUNK_SIZE = 5 * 1024 * 1024; // Increase to 5MB chunks
 
-const uploadLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 50, // Limit each IP to 50 upload requests per hour
-    message: 'Upload limit exceeded, please try again later'
+// Update rate limiters for large files
+const initUploadLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute window
+    max: 30, // 30 new upload initializations per minute
+    message: { error: 'Too many upload attempts. Please wait before starting new uploads.' },
+    standardHeaders: true,
+    legacyHeaders: false
 });
-
-// Apply rate limiting to all API routes
-app.use('/api/', apiLimiter);
-app.use('/upload/', uploadLimiter);
 
 // Brute force protection setup
 const loginAttempts = new Map();  // Stores IP addresses and their attempt counts
@@ -260,7 +255,7 @@ app.use('/upload', requirePin);
 const uploads = new Map();
 
 // Routes
-app.post('/upload/init', async (req, res) => {
+app.post('/upload/init', initUploadLimiter, async (req, res) => {
     const { filename, fileSize } = req.body;
 
     const safeFilename = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
