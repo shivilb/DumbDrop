@@ -218,12 +218,45 @@ app.use('/upload', requirePin);
 
 // Store ongoing uploads
 const uploads = new Map();
+// Store folder name mappings for batch uploads with timestamps
+const folderMappings = new Map();
+// Store batch IDs for folder uploads
+const batchUploads = new Map();
+
+// Add these helper functions before the routes
+function getUniqueFilePath(filePath) {
+    const dir = path.dirname(filePath);
+    const ext = path.extname(filePath);
+    const baseName = path.basename(filePath, ext);
+    let counter = 1;
+    let newPath = filePath;
+
+    while (fs.existsSync(newPath)) {
+        newPath = path.join(dir, `${baseName} (${counter})${ext}`);
+        counter++;
+    }
+
+    return newPath;
+}
+
+function getUniqueFolderPath(folderPath) {
+    let counter = 1;
+    let newPath = folderPath;
+
+    while (fs.existsSync(newPath)) {
+        newPath = `${folderPath} (${counter})`;
+        counter++;
+    }
+
+    return newPath;
+}
 
 // Routes
 app.post('/upload/init', async (req, res) => {
     const { filename, fileSize } = req.body;
+    const batchId = req.headers['x-batch-id'] || Date.now().toString();
 
-    const safeFilename = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '')
+    const safeFilename = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
     
     // Check file size limit
     if (fileSize > maxFileSize) {
@@ -236,20 +269,57 @@ app.post('/upload/init', async (req, res) => {
     }
 
     const uploadId = Date.now().toString();
-    const filePath = path.join(uploadDir, safeFilename);
+    let filePath = path.join(uploadDir, safeFilename);
     
     try {
+        // Handle file/folder duplication
+        const pathParts = safeFilename.split('/');
+        
+        if (pathParts.length > 1) {
+            // This is a file within a folder
+            const originalFolderName = pathParts[0];
+            const folderPath = path.join(uploadDir, originalFolderName);
+
+            // Check if we already have a mapping for this folder in this batch
+            let newFolderName = folderMappings.get(`${originalFolderName}-${batchId}`);
+            
+            if (!newFolderName) {
+                // Always check if the folder exists, even for new uploads
+                if (fs.existsSync(folderPath)) {
+                    const uniqueFolderPath = getUniqueFolderPath(folderPath);
+                    newFolderName = path.basename(uniqueFolderPath);
+                    log.info(`Folder "${originalFolderName}" exists, using "${newFolderName}" instead`);
+                } else {
+                    newFolderName = originalFolderName;
+                }
+                folderMappings.set(`${originalFolderName}-${batchId}`, newFolderName);
+                
+                // Clean up mapping after 5 minutes
+                setTimeout(() => {
+                    folderMappings.delete(`${originalFolderName}-${batchId}`);
+                }, 5 * 60 * 1000);
+            }
+
+            // Replace the original folder path with the mapped one and keep original file name
+            pathParts[0] = newFolderName;
+            filePath = path.join(uploadDir, ...pathParts);
+        } else {
+            // This is a single file
+            filePath = getUniqueFilePath(filePath);
+        }
+
+        // Ensure the directory exists before creating the write stream
         await ensureDirectoryExists(filePath);
         
         uploads.set(uploadId, {
-            safeFilename,
+            safeFilename: path.relative(uploadDir, filePath),
             filePath,
             fileSize,
             bytesReceived: 0,
-            writeStream: fs.createWriteStream(filePath)
+            writeStream: fs.createWriteStream(filePath, { flags: 'wx' })
         });
 
-        log.info(`Initialized upload for ${safeFilename} (${fileSize} bytes)`);
+        log.info(`Initialized upload for ${path.relative(uploadDir, filePath)} (${fileSize} bytes)`);
         res.json({ uploadId });
     } catch (err) {
         log.error(`Failed to initialize upload: ${err.message}`);
