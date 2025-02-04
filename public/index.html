@@ -216,10 +216,16 @@
                             name: folderName,
                             isFolder: true,
                             totalSize: 0,
-                            files: []
+                            files: [],
+                            // Use the first file's batch ID or generate a new one
+                            batchId: file.batchId
                         });
                     }
                     const group = groups.get(folderName);
+                    // If group doesn't have a batch ID yet, use the file's batch ID
+                    if (!group.batchId) {
+                        group.batchId = file.batchId;
+                    }
                     group.files.push(file);
                     group.totalSize += file.size;
                 } else {
@@ -228,7 +234,8 @@
                         name: file.name,
                         isFolder: false,
                         totalSize: file.size,
-                        files: [file]
+                        files: [file],
+                        batchId: file.batchId
                     });
                 }
             });
@@ -245,7 +252,7 @@
                 if (entry.isFile) {
                     const file = await new Promise((resolve) => entry.file(resolve));
                     file.relativePath = path;
-                    file.batchId = batchId;
+                    file.batchId = batchId; // Use the same batch ID for all files in this drop
                     fileEntries.push(file);
                 } else if (entry.isDirectory) {
                     const reader = entry.createReader();
@@ -304,20 +311,29 @@
         function handleDrop(e) {
             const items = e.dataTransfer.items;
             if (items && items[0].webkitGetAsEntry) {
+                // Handle folder/file drop using DataTransferItemList
                 getAllFileEntries(items).then(newFiles => {
                     files = newFiles;
                     updateFileList();
                 });
             } else {
+                // Handle single file drop
+                const batchId = generateBatchId();
                 files = [...e.dataTransfer.files];
+                files.forEach(file => {
+                    file.relativePath = ''; // No relative path for dropped files
+                    file.batchId = batchId;
+                });
                 updateFileList();
             }
         }
 
         function handleFiles(e) {
+            const batchId = generateBatchId();
             files = [...e.target.files];
             files.forEach(file => {
                 file.relativePath = ''; // No relative path for individual files
+                file.batchId = batchId;
             });
             updateFileList();
         }
@@ -367,13 +383,15 @@
             document.getElementById('uploadProgress').innerHTML = '';
             
             const groupedItems = groupFilesByFolder(files);
-            const batchId = generateBatchId(); // Generate a single batch ID for all files
             
             const results = await Promise.all(
                 groupedItems.map(async item => {
                     let success = true;
+                    // Use the group's batch ID for all files in the group
+                    const groupBatchId = item.batchId || generateBatchId();
                     for (const file of item.files) {
-                        const uploader = new FileUploader(file, batchId);
+                        // Always use the group's batch ID
+                        const uploader = new FileUploader(file, groupBatchId);
                         if (!await uploader.start()) {
                             success = false;
                         }

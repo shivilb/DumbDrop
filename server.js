@@ -315,6 +315,9 @@ app.post('/upload/init', async (req, res) => {
         return res.status(400).json({ error: 'Invalid batch ID format' });
     }
 
+    // Always update batch activity timestamp for any upload
+    batchActivity.set(batchId, Date.now());
+
     const safeFilename = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
     
     // Check file size limit
@@ -360,9 +363,6 @@ app.post('/upload/init', async (req, res) => {
                 }
                 
                 folderMappings.set(`${originalFolderName}-${batchId}`, newFolderName);
-                
-                // Update batch activity timestamp instead of setting a timeout
-                batchActivity.set(batchId, Date.now());
             }
 
             // Replace the original folder path with the mapped one and keep original file name
