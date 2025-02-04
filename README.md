@@ -32,6 +32,7 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 | APPRISE_URL      | Apprise URL for notifications         | None    | No       |
 | APPRISE_MESSAGE  | Notification message template         | New file uploaded {filename} ({size}), Storage used {storage} | No |
 | APPRISE_SIZE_UNIT| Size unit for notifications           | Auto    | No       |
+| AUTO_UPLOAD      | Enable automatic upload on file selection | false   | No       |
 | ALLOWED_EXTENSIONS| Comma-separated list of allowed file extensions | None    | No       |
 
 ## File Extension Filtering

@@ -18,9 +18,10 @@ const port = process.env.PORT || 3000;
 const uploadDir = './uploads';  // Local development
 const maxFileSize = parseInt(process.env.MAX_FILE_SIZE || '1024') * 1024 * 1024; // Convert MB to bytes
 const APPRISE_URL = process.env.APPRISE_URL;
-const APPRISE_MESSAGE = process.env.APPRISE_MESSAGE || 'New file uploaded - {filename} ({size}), Storage used: {storage}';
+const APPRISE_MESSAGE = process.env.APPRISE_MESSAGE || 'New file uploaded - {filename} ({size}), Storage used {storage}';
 const siteTitle = process.env.DUMBDROP_TITLE || 'DumbDrop';
 const APPRISE_SIZE_UNIT = process.env.APPRISE_SIZE_UNIT;
+const AUTO_UPLOAD = process.env.AUTO_UPLOAD === 'true';
 
 // Update the chunk size and rate limits
 const CHUNK_SIZE = 5 * 1024 * 1024; // Increase to 5MB chunks
@@ -238,7 +239,8 @@ app.get('/', (req, res) => {
     }
     // Read the file and replace the title
     let html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
-    html = html.replace(/{{SITE_TITLE}}/g, siteTitle);  // Use global replace
+    html = html.replace(/{{SITE_TITLE}}/g, siteTitle);
+    html = html.replace('{{AUTO_UPLOAD}}', AUTO_UPLOAD.toString());
     res.send(html);
 });
 
@@ -532,6 +534,9 @@ app.listen(port, () => {
     if (process.env.DUMBDROP_TITLE) {
         log.info(`Custom title set to: ${siteTitle}`);
     }
+    
+    // Add auto upload status logging
+    log.info(`Auto upload is ${AUTO_UPLOAD ? 'enabled' : 'disabled'}`);
     
     // Add Apprise configuration logging
     if (APPRISE_URL) {
