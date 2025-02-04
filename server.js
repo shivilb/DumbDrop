@@ -251,10 +251,22 @@ function getUniqueFolderPath(folderPath) {
     return newPath;
 }
 
+// Validate batch ID format
+function isValidBatchId(batchId) {
+    // Batch ID should be in format: timestamp-randomstring
+    return /^\d+-[a-z0-9]{9}$/.test(batchId);
+}
+
 // Routes
 app.post('/upload/init', async (req, res) => {
     const { filename, fileSize } = req.body;
-    const batchId = req.headers['x-batch-id'] || Date.now().toString();
+    const batchId = req.headers['x-batch-id'];
+
+    // Validate batch ID
+    if (!batchId || !isValidBatchId(batchId)) {
+        log.error('Invalid or missing batch ID');
+        return res.status(400).json({ error: 'Invalid or missing batch ID' });
+    }
 
     const safeFilename = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
     
@@ -268,7 +280,7 @@ app.post('/upload/init', async (req, res) => {
         });
     }
 
-    const uploadId = Date.now().toString();
+    const uploadId = crypto.randomBytes(16).toString('hex');
     let filePath = path.join(uploadDir, safeFilename);
     
     try {

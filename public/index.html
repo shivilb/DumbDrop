@@ -61,9 +61,15 @@
         const MAX_RETRIES = 3;
         const RETRY_DELAY = 1000;
 
+        // Utility function to generate a unique batch ID
+        function generateBatchId() {
+            return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        }
+
         class FileUploader {
-            constructor(file) {
+            constructor(file, batchId) {
                 this.file = file;
+                this.batchId = batchId;
                 this.uploadId = null;
                 this.position = 0;
                 this.progressElement = null;
@@ -90,7 +96,7 @@
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'X-Batch-ID': this.file.batchId || Date.now().toString()
+                        'X-Batch-ID': this.batchId
                     },
                     body: JSON.stringify({
                         filename: uploadPath,
@@ -233,7 +239,7 @@
         // Helper function to process directory entries
         async function getAllFileEntries(dataTransferItems) {
             let fileEntries = [];
-            const batchId = Date.now().toString();
+            const batchId = generateBatchId();
             
             async function traverseEntry(entry, path = '') {
                 if (entry.isFile) {
@@ -317,7 +323,7 @@
         }
 
         function handleFolders(e) {
-            const batchId = Date.now().toString();
+            const batchId = generateBatchId();
             files = [...e.target.files];
             files.forEach(file => {
                 const pathParts = file.webkitRelativePath.split('/');
@@ -361,11 +367,13 @@
             document.getElementById('uploadProgress').innerHTML = '';
             
             const groupedItems = groupFilesByFolder(files);
+            const batchId = generateBatchId(); // Generate a single batch ID for all files
+            
             const results = await Promise.all(
                 groupedItems.map(async item => {
                     let success = true;
                     for (const file of item.files) {
-                        const uploader = new FileUploader(file);
+                        const uploader = new FileUploader(file, batchId);
                         if (!await uploader.start()) {
                             success = false;
                         }
