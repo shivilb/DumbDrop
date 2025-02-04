@@ -303,12 +303,16 @@ function isValidBatchId(batchId) {
 // Routes
 app.post('/upload/init', async (req, res) => {
     const { filename, fileSize } = req.body;
-    const batchId = req.headers['x-batch-id'];
+    let batchId = req.headers['x-batch-id'];
 
-    // Validate batch ID
-    if (!batchId || !isValidBatchId(batchId)) {
-        log.error('Invalid or missing batch ID');
-        return res.status(400).json({ error: 'Invalid or missing batch ID' });
+    // For single file uploads without a batch ID, generate one
+    if (!batchId) {
+        const timestamp = Date.now();
+        const randomStr = crypto.randomBytes(4).toString('hex').substring(0, 9);
+        batchId = `${timestamp}-${randomStr}`;
+    } else if (!isValidBatchId(batchId)) {
+        log.error('Invalid batch ID format');
+        return res.status(400).json({ error: 'Invalid batch ID format' });
     }
 
     const safeFilename = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
