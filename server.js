@@ -224,31 +224,55 @@ const folderMappings = new Map();
 const batchUploads = new Map();
 
 // Add these helper functions before the routes
-function getUniqueFilePath(filePath) {
+async function getUniqueFilePath(filePath) {
     const dir = path.dirname(filePath);
     const ext = path.extname(filePath);
     const baseName = path.basename(filePath, ext);
     let counter = 1;
-    let newPath = filePath;
+    let finalPath = filePath;
 
-    while (fs.existsSync(newPath)) {
-        newPath = path.join(dir, `${baseName} (${counter})${ext}`);
-        counter++;
+    while (true) {
+        try {
+            // Try to create the file exclusively - will fail if file exists
+            const fileHandle = await fs.promises.open(finalPath, 'wx');
+            // Return both the path and handle instead of closing it
+            return { path: finalPath, handle: fileHandle };
+        } catch (err) {
+            if (err.code === 'EEXIST') {
+                // File exists, try next number
+                finalPath = path.join(dir, `${baseName} (${counter})${ext}`);
+                counter++;
+            } else {
+                throw err; // Other errors should be handled by caller
+            }
+        }
     }
-
-    return newPath;
 }
 
-function getUniqueFolderPath(folderPath) {
+async function getUniqueFolderPath(folderPath) {
     let counter = 1;
-    let newPath = folderPath;
+    let finalPath = folderPath;
 
-    while (fs.existsSync(newPath)) {
-        newPath = `${folderPath} (${counter})`;
-        counter++;
+    while (true) {
+        try {
+            // Try to create the directory - mkdir with recursive:false is atomic
+            await fs.promises.mkdir(finalPath, { recursive: false });
+            return finalPath;
+        } catch (err) {
+            if (err.code === 'EEXIST') {
+                // Folder exists, try next number
+                finalPath = `${folderPath} (${counter})`;
+                counter++;
+            } else if (err.code === 'ENOENT') {
+                // Parent directory doesn't exist, create it first
+                await fs.promises.mkdir(path.dirname(finalPath), { recursive: true });
+                // Then try again with the same path
+                continue;
+            } else {
+                throw err; // Other errors should be handled by caller
+            }
+        }
     }
-
-    return newPath;
 }
 
 // Validate batch ID format
@@ -282,6 +306,7 @@ app.post('/upload/init', async (req, res) => {
 
     const uploadId = crypto.randomBytes(16).toString('hex');
     let filePath = path.join(uploadDir, safeFilename);
+    let fileHandle;
     
     try {
         // Handle file/folder duplication
@@ -296,14 +321,21 @@ app.post('/upload/init', async (req, res) => {
             let newFolderName = folderMappings.get(`${originalFolderName}-${batchId}`);
             
             if (!newFolderName) {
-                // Always check if the folder exists, even for new uploads
-                if (fs.existsSync(folderPath)) {
-                    const uniqueFolderPath = getUniqueFolderPath(folderPath);
-                    newFolderName = path.basename(uniqueFolderPath);
-                    log.info(`Folder "${originalFolderName}" exists, using "${newFolderName}" instead`);
-                } else {
+                try {
+                    // Try to create the folder atomically first
+                    await fs.promises.mkdir(folderPath, { recursive: false });
                     newFolderName = originalFolderName;
+                } catch (err) {
+                    if (err.code === 'EEXIST') {
+                        // Folder exists, get a unique name
+                        const uniqueFolderPath = await getUniqueFolderPath(folderPath);
+                        newFolderName = path.basename(uniqueFolderPath);
+                        log.info(`Folder "${originalFolderName}" exists, using "${newFolderName}" instead`);
+                    } else {
+                        throw err;
+                    }
                 }
+                
                 folderMappings.set(`${originalFolderName}-${batchId}`, newFolderName);
                 
                 // Clean up mapping after 5 minutes
@@ -315,25 +347,34 @@ app.post('/upload/init', async (req, res) => {
             // Replace the original folder path with the mapped one and keep original file name
             pathParts[0] = newFolderName;
             filePath = path.join(uploadDir, ...pathParts);
-        } else {
-            // This is a single file
-            filePath = getUniqueFilePath(filePath);
+            
+            // Ensure parent directories exist
+            await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
         }
 
-        // Ensure the directory exists before creating the write stream
-        await ensureDirectoryExists(filePath);
+        // For both single files and files in folders, get a unique path and file handle
+        const result = await getUniqueFilePath(filePath);
+        filePath = result.path;
+        fileHandle = result.handle;
         
+        // Create upload entry (using the file handle we already have)
         uploads.set(uploadId, {
             safeFilename: path.relative(uploadDir, filePath),
             filePath,
             fileSize,
             bytesReceived: 0,
-            writeStream: fs.createWriteStream(filePath, { flags: 'wx' })
+            writeStream: fileHandle.createWriteStream()
         });
 
         log.info(`Initialized upload for ${path.relative(uploadDir, filePath)} (${fileSize} bytes)`);
         res.json({ uploadId });
     } catch (err) {
+        // Clean up file handle if something went wrong
+        if (fileHandle) {
+            await fileHandle.close().catch(() => {});
+            // Try to remove the file if it was created
+            fs.unlink(filePath).catch(() => {});
+        }
         log.error(`Failed to initialize upload: ${err.message}`);
         res.status(500).json({ error: 'Failed to initialize upload' });
     }
