@@ -60,7 +60,7 @@
         const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
         const MAX_RETRIES = 3;
         const RETRY_DELAY = 1000;
-        const AUTO_UPLOAD = '{{AUTO_UPLOAD}}' === 'true';
+        const AUTO_UPLOAD = ['true', '1', 'yes'].includes('{{AUTO_UPLOAD}}'.toLowerCase());
 
         // Utility function to generate a unique batch ID
         function generateBatchId() {
