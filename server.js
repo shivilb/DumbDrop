@@ -222,6 +222,25 @@ const uploads = new Map();
 const folderMappings = new Map();
 // Store batch IDs for folder uploads
 const batchUploads = new Map();
+// Store batch activity timestamps
+const batchActivity = new Map();
+
+// Add cleanup interval for inactive batches
+setInterval(() => {
+    const now = Date.now();
+    for (const [batchId, lastActivity] of batchActivity.entries()) {
+        if (now - lastActivity >= 5 * 60 * 1000) { // 5 minutes of inactivity
+            // Clean up all folder mappings for this batch
+            for (const key of folderMappings.keys()) {
+                if (key.endsWith(`-${batchId}`)) {
+                    folderMappings.delete(key);
+                }
+            }
+            batchActivity.delete(batchId);
+            log.info(`Cleaned up folder mappings for inactive batch: ${batchId}`);
+        }
+    }
+}, 60000); // Check every minute
 
 // Add these helper functions before the routes
 async function getUniqueFilePath(filePath) {
@@ -338,10 +357,8 @@ app.post('/upload/init', async (req, res) => {
                 
                 folderMappings.set(`${originalFolderName}-${batchId}`, newFolderName);
                 
-                // Clean up mapping after 5 minutes
-                setTimeout(() => {
-                    folderMappings.delete(`${originalFolderName}-${batchId}`);
-                }, 5 * 60 * 1000);
+                // Update batch activity timestamp instead of setting a timeout
+                batchActivity.set(batchId, Date.now());
             }
 
             // Replace the original folder path with the mapped one and keep original file name
@@ -393,6 +410,13 @@ app.post('/upload/chunk/:uploadId', express.raw({
     }
 
     try {
+        // Get the batch ID from the request headers
+        const batchId = req.headers['x-batch-id'];
+        if (batchId && isValidBatchId(batchId)) {
+            // Update batch activity timestamp
+            batchActivity.set(batchId, Date.now());
+        }
+
         upload.writeStream.write(Buffer.from(req.body));
         upload.bytesReceived += chunkSize;
 
