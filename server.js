@@ -218,12 +218,107 @@ app.use('/upload', requirePin);
 
 // Store ongoing uploads
 const uploads = new Map();
+// Store folder name mappings for batch uploads with timestamps
+const folderMappings = new Map();
+// Store batch IDs for folder uploads
+const batchUploads = new Map();
+// Store batch activity timestamps
+const batchActivity = new Map();
+
+// Add cleanup interval for inactive batches
+setInterval(() => {
+    const now = Date.now();
+    for (const [batchId, lastActivity] of batchActivity.entries()) {
+        if (now - lastActivity >= 5 * 60 * 1000) { // 5 minutes of inactivity
+            // Clean up all folder mappings for this batch
+            for (const key of folderMappings.keys()) {
+                if (key.endsWith(`-${batchId}`)) {
+                    folderMappings.delete(key);
+                }
+            }
+            batchActivity.delete(batchId);
+            log.info(`Cleaned up folder mappings for inactive batch: ${batchId}`);
+        }
+    }
+}, 60000); // Check every minute
+
+// Add these helper functions before the routes
+async function getUniqueFilePath(filePath) {
+    const dir = path.dirname(filePath);
+    const ext = path.extname(filePath);
+    const baseName = path.basename(filePath, ext);
+    let counter = 1;
+    let finalPath = filePath;
+
+    while (true) {
+        try {
+            // Try to create the file exclusively - will fail if file exists
+            const fileHandle = await fs.promises.open(finalPath, 'wx');
+            // Return both the path and handle instead of closing it
+            return { path: finalPath, handle: fileHandle };
+        } catch (err) {
+            if (err.code === 'EEXIST') {
+                // File exists, try next number
+                finalPath = path.join(dir, `${baseName} (${counter})${ext}`);
+                counter++;
+            } else {
+                throw err; // Other errors should be handled by caller
+            }
+        }
+    }
+}
+
+async function getUniqueFolderPath(folderPath) {
+    let counter = 1;
+    let finalPath = folderPath;
+
+    while (true) {
+        try {
+            // Try to create the directory - mkdir with recursive:false is atomic
+            await fs.promises.mkdir(finalPath, { recursive: false });
+            return finalPath;
+        } catch (err) {
+            if (err.code === 'EEXIST') {
+                // Folder exists, try next number
+                finalPath = `${folderPath} (${counter})`;
+                counter++;
+            } else if (err.code === 'ENOENT') {
+                // Parent directory doesn't exist, create it first
+                await fs.promises.mkdir(path.dirname(finalPath), { recursive: true });
+                // Then try again with the same path
+                continue;
+            } else {
+                throw err; // Other errors should be handled by caller
+            }
+        }
+    }
+}
+
+// Validate batch ID format
+function isValidBatchId(batchId) {
+    // Batch ID should be in format: timestamp-randomstring
+    return /^\d+-[a-z0-9]{9}$/.test(batchId);
+}
 
 // Routes
 app.post('/upload/init', async (req, res) => {
     const { filename, fileSize } = req.body;
+    let batchId = req.headers['x-batch-id'];
 
-    const safeFilename = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '')
+    // For single file uploads without a batch ID, generate one
+    if (!batchId) {
+        const timestamp = Date.now();
+        const randomStr = crypto.randomBytes(4).toString('hex').substring(0, 9);
+        batchId = `${timestamp}-${randomStr}`;
+    } else if (!isValidBatchId(batchId)) {
+        log.error('Invalid batch ID format');
+        return res.status(400).json({ error: 'Invalid batch ID format' });
+    }
+
+    // Always update batch activity timestamp for any upload
+    batchActivity.set(batchId, Date.now());
+
+    const safeFilename = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
     
     // Check file size limit
     if (fileSize > maxFileSize) {
@@ -235,23 +330,72 @@ app.post('/upload/init', async (req, res) => {
         });
     }
 
-    const uploadId = Date.now().toString();
-    const filePath = path.join(uploadDir, safeFilename);
+    const uploadId = crypto.randomBytes(16).toString('hex');
+    let filePath = path.join(uploadDir, safeFilename);
+    let fileHandle;
     
     try {
-        await ensureDirectoryExists(filePath);
+        // Handle file/folder duplication
+        const pathParts = safeFilename.split('/');
         
+        if (pathParts.length > 1) {
+            // This is a file within a folder
+            const originalFolderName = pathParts[0];
+            const folderPath = path.join(uploadDir, originalFolderName);
+
+            // Check if we already have a mapping for this folder in this batch
+            let newFolderName = folderMappings.get(`${originalFolderName}-${batchId}`);
+            
+            if (!newFolderName) {
+                try {
+                    // Try to create the folder atomically first
+                    await fs.promises.mkdir(folderPath, { recursive: false });
+                    newFolderName = originalFolderName;
+                } catch (err) {
+                    if (err.code === 'EEXIST') {
+                        // Folder exists, get a unique name
+                        const uniqueFolderPath = await getUniqueFolderPath(folderPath);
+                        newFolderName = path.basename(uniqueFolderPath);
+                        log.info(`Folder "${originalFolderName}" exists, using "${newFolderName}" instead`);
+                    } else {
+                        throw err;
+                    }
+                }
+                
+                folderMappings.set(`${originalFolderName}-${batchId}`, newFolderName);
+            }
+
+            // Replace the original folder path with the mapped one and keep original file name
+            pathParts[0] = newFolderName;
+            filePath = path.join(uploadDir, ...pathParts);
+            
+            // Ensure parent directories exist
+            await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+        }
+
+        // For both single files and files in folders, get a unique path and file handle
+        const result = await getUniqueFilePath(filePath);
+        filePath = result.path;
+        fileHandle = result.handle;
+        
+        // Create upload entry (using the file handle we already have)
         uploads.set(uploadId, {
-            safeFilename,
+            safeFilename: path.relative(uploadDir, filePath),
             filePath,
             fileSize,
             bytesReceived: 0,
-            writeStream: fs.createWriteStream(filePath)
+            writeStream: fileHandle.createWriteStream()
         });
 
-        log.info(`Initialized upload for ${safeFilename} (${fileSize} bytes)`);
+        log.info(`Initialized upload for ${path.relative(uploadDir, filePath)} (${fileSize} bytes)`);
         res.json({ uploadId });
     } catch (err) {
+        // Clean up file handle if something went wrong
+        if (fileHandle) {
+            await fileHandle.close().catch(() => {});
+            // Try to remove the file if it was created
+            fs.unlink(filePath).catch(() => {});
+        }
         log.error(`Failed to initialize upload: ${err.message}`);
         res.status(500).json({ error: 'Failed to initialize upload' });
     }
@@ -270,6 +414,13 @@ app.post('/upload/chunk/:uploadId', express.raw({
     }
 
     try {
+        // Get the batch ID from the request headers
+        const batchId = req.headers['x-batch-id'];
+        if (batchId && isValidBatchId(batchId)) {
+            // Update batch activity timestamp
+            batchActivity.set(batchId, Date.now());
+        }
+
         upload.writeStream.write(Buffer.from(req.body));
         upload.bytesReceived += chunkSize;
 
