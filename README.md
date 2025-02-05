@@ -4,8 +4,76 @@ A stupid simple file upload application that provides a clean, modern interface 
 
 ![image](https://github.com/user-attachments/assets/2e39d8ef-b250-4689-9553-a580f11c06a7)
 
-
 No auth (unless you want it now!), no storage, no nothing. Just a simple file uploader to drop dumb files into a dumb folder.
+
+## Quick Start
+
+### Option 1: Docker (For Dummies)
+```bash
+# Pull and run with one command
+docker run -p 3000:3000 -v ./local_uploads:/app/uploads dumbwareio/dumbdrop:latest
+```
+1. Go to http://localhost:3000
+2. Upload a File - It'll show up in ./local_uploads
+3. Celebrate on how dumb easy this was
+
+### Option 2: Docker Compose (For Dummies who like customizing)
+Create a `docker-compose.yml` file:
+```yaml
+services:
+    dumbdrop:
+        image: dumbwareio/dumbdrop:latest
+        ports:
+            - 3000:3000
+        volumes:
+            # Where your uploaded files will land
+            - ./local_uploads:/app/uploads 
+        environment:
+            # The title shown in the web interface
+            DUMBDROP_TITLE: DumbDrop
+            # Maximum file size in MB
+            MAX_FILE_SIZE: 1024
+            # Optional PIN protection (leave empty to disable)
+            DUMBDROP_PIN: 123456
+            # Upload without clicking button
+            AUTO_UPLOAD: false
+```
+
+Then run:
+```bash
+docker compose up -d
+```
+
+1. Go to http://localhost:3000
+2. Upload a File - It'll show up in ./local_uploads
+3. Rejoice in the glory of your dumb uploads
+
+### Option 3: Running Locally (For Developers)
+
+> If you're a developer, check out our [Dev Guide](#development) for the dumb setup.
+
+1. Install dependencies:
+```bash
+npm install
+```
+
+2. Set environment variables in `.env`:
+```env
+PORT=3000                  # Port to run the server on
+MAX_FILE_SIZE=1024        # Maximum file size in MB
+DUMBDROP_PIN=123456       # Optional PIN protection
+```
+
+3. Start the server:
+```bash
+npm start
+```
+
+#### Windows Users
+If you're using Windows PowerShell with Docker, use this format for paths:
+```bash
+docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" dumbwareio/dumbdrop:latest
+```
 
 ## Features
 
@@ -19,9 +87,10 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 - Drag and Drop Directory Support (Maintains file structure in upload)
 - Optional PIN protection (4-10 digits) with secure validation
 - Configurable notifications via Apprise
-- Custom notification messages with filename templating
 
-## Environment Variables
+## Configuration
+
+### Environment Variables
 
 | Variable          | Description                           | Default | Required |
 |------------------|---------------------------------------|---------|----------|
@@ -35,14 +104,16 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 | AUTO_UPLOAD      | Enable automatic upload on file selection | false   | No       |
 | ALLOWED_EXTENSIONS| Comma-separated list of allowed file extensions | None    | No       |
 
-## File Extension Filtering
+### File Extension Filtering
 To restrict which file types can be uploaded, set the `ALLOWED_EXTENSIONS` environment variable. For example:
 ```env
 ALLOWED_EXTENSIONS=.jpg,.jpeg,.png,.pdf,.doc,.docx,.txt
 ```
 If not set, all file extensions will be allowed.
 
-## Notification Templates
+### Notification Setup
+
+#### Message Templates
 The notification message supports the following placeholders:
 - `{filename}`: Name of the uploaded file
 - `{size}`: Size of the file (formatted according to APPRISE_SIZE_UNIT)
@@ -59,6 +130,12 @@ Size formatting examples:
 
 Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UNIT.
 
+#### Notification Support
+- Integration with [Apprise](https://github.com/caronc/apprise?tab=readme-ov-file#supported-notifications) for flexible notifications
+- Support for all Apprise notification services
+- Customizable notification messages with filename templating
+- Optional - disabled if no APPRISE_URL is set
+
 ## Security Features
 
 - Variable-length PIN support (4-10 digits)
@@ -69,94 +146,9 @@ Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UN
 - Rate Limiting to prevent brute force attacks
 - Optional file extension filtering
 
-## Notification Support
-- Integration with [Apprise](https://github.com/caronc/apprise?tab=readme-ov-file#supported-notifications) for flexible notifications
-- Support for all Apprise notification services
-- Customizable notification messages with filename templating
-- Optional - disabled if no APPRISE_URL is set
+## Development
 
-# Future Features
-- Camera Upload for Mobile
-- Enhanced Progress Features (upload speed display, time remaining estimation)
-
-
-## Quick Start
-
-### Running Locally
-
-1. Install dependencies:
-```bash
-npm install
-```
-
-2. Set environment variables in `.env`:
-```env
-PORT=3000                  # Port to run the server on
-MAX_FILE_SIZE=1024        # Maximum file size in MB (default: 1024 MB / 1 GB)
-DUMBDROP_PIN=123456       # Optional PIN protection (4-10 digits, leave empty to disable)
-```
-
-3. Start the server:
-```bash
-npm start
-```
-
-### Running with Docker
-
-#### Pull from Docker Hub
-```bash
-# Pull the image
-docker pull dumbwareio/dumbdrop:latest
-
-# Run the container
-# For Linux/Mac:
-docker run -p 3000:3000 -v $(pwd)/local_uploads:/app/uploads -e DUMBDROP_PIN=123456 dumbwareio/dumbdrop:latest
-
-# For Windows PowerShell:
-docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" -e DUMBDROP_PIN=123456 dumbwareio/dumbdrop:latest
-```
-
-# Docker Compose
-```yml
-name: Dumb Drop
-services:
-    dumbdrop:
-        ports:
-            - 3000:3000
-        volumes:
-            - $(pwd)/local_uploads:/app/uploads
-        environment:
-            - DUMBDROP_PIN=123456
-            # - APPRISE_URL=          # i.e. tgram://bottoken/ChatID
-            # - APPRISE_MESSAGE= 
-        image: dumbwareio/dumbdrop:latest
-```
-
-#### Build Locally
-1. Build the Docker image:
-```bash
-docker build -t dumbdrop .
-```
-
-2. Run the container:
-```bash
-# For Linux/Mac:
-docker run -p 3000:3000 -v $(pwd)/local_uploads:/app/uploads -e DUMBDROP_PIN=123456 dumbdrop
-
-# For Windows PowerShell:
-docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" -e DUMBDROP_PIN=123456 dumbdrop
-```
-
-## Usage
-
-1. Open your browser and navigate to `http://localhost:3000` (unless another domain has been setup)
-2. If PIN protection is enabled, enter the 4-10 digit PIN
-3. Drag and drop files into the upload area or click "Browse Files"
-4. Select one or multiple files
-5. Click "Upload Files"
-6. Files will be saved to:
-   - Local development: `./uploads` directory
-   - Docker/Unraid: The directory you mapped to `/app/uploads` in the container
+Want to contribute or develop locally? Check out our [Development Guide](dev/README.md) - it's stupid simple, just the way we like it! If you're writing complex code to solve a simple problem, you're probably doing it wrong. Keep it dumb, keep it simple.
 
 ## Technical Details
 
@@ -165,3 +157,7 @@ docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" -e DUMBDROP_PIN=1
 - File handling: Chunked file uploads with configurable size limits
 - Security: Optional PIN protection for uploads
 - Containerization: Docker with automated builds via GitHub Actions
+
+## Future Features
+- Camera Upload for Mobile
+> Got an idea? [Open an issue](https://github.com/dumbwareio/dumbdrop/issues) or [submit a PR](https://github.com/dumbwareio/dumbdrop/pulls)

@@ -1,17 +1,13 @@
 services:
     dumbdrop:
+        image: dumbwareio/dumbdrop:latest
         ports:
             - 3000:3000
         volumes:
-            - ./local_uploads:/app/uploads
+            # Replace "./local_uploads" ( before the colon ) with the path where the files land
+            - ./local_uploads:/app/uploads 
         environment:
-            DUMBDROP_TITLE: DumbDrop
-            MAX_FILE_SIZE: 1024
-            DUMBDROP_PIN: 123456
-            # APPRISE_URL: ntfys://
-            # APPRISE_MESSAGE: New file uploaded - {filename} ({size}), Storage used {storage} 
-            # AUTO_UPLOAD: false
-            APPRISE_MESSAGE: New file uploaded - {filename} ({size}), Storage used {storage} 
-            APPRISE_SIZE_UNIT: auto
-        image: dumbwareio/dumbdrop:latest
-        # build: .
+            DUMBDROP_TITLE: DumbDrop # Replace "DumbDrop" with the title you want to display
+            MAX_FILE_SIZE: 1024 # Replace "1024" with the maximum file size you want to allow in MB
+            DUMBDROP_PIN: 123456 # Replace "123456" with the pin you want to use 
+            AUTO_UPLOAD: false # Set to true if you want dont want to have to click the upload button

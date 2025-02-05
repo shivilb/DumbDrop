@@ -145,3 +145,9 @@ convert-icon.js
 # OS
 .DS_Store
 Thumbs.db
+
+# Development
+dev/*
+!dev/docker-compose.dev.yml
+!dev/dev.sh
+!dev/README.md
