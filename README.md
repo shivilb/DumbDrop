@@ -32,6 +32,15 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 | APPRISE_URL      | Apprise URL for notifications         | None    | No       |
 | APPRISE_MESSAGE  | Notification message template         | New file uploaded {filename} ({size}), Storage used {storage} | No |
 | APPRISE_SIZE_UNIT| Size unit for notifications           | Auto    | No       |
+| AUTO_UPLOAD      | Enable automatic upload on file selection | false   | No       |
+| ALLOWED_EXTENSIONS| Comma-separated list of allowed file extensions | None    | No       |
+
+## File Extension Filtering
+To restrict which file types can be uploaded, set the `ALLOWED_EXTENSIONS` environment variable. For example:
+```env
+ALLOWED_EXTENSIONS=.jpg,.jpeg,.png,.pdf,.doc,.docx,.txt
+```
+If not set, all file extensions will be allowed.
 
 ## Notification Templates
 The notification message supports the following placeholders:
@@ -57,6 +66,8 @@ Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UN
 - Automatic input sanitization
 - Secure PIN validation middleware
 - No PIN storage in browser (memory only)
+- Rate Limiting to prevent brute force attacks
+- Optional file extension filtering
 
 ## Notification Support
 - Integration with [Apprise](https://github.com/caronc/apprise?tab=readme-ov-file#supported-notifications) for flexible notifications

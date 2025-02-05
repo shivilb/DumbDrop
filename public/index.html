@@ -52,6 +52,7 @@
         const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
         const MAX_RETRIES = 3;
         const RETRY_DELAY = 1000;
+        const AUTO_UPLOAD = ['true', '1', 'yes'].includes('{{AUTO_UPLOAD}}'.toLowerCase());
 
         // Utility function to generate a unique batch ID
         function generateBatchId() {
@@ -519,6 +520,7 @@
                 getAllFileEntries(items).then(newFiles => {
                     files = newFiles;
                     updateFileList();
+                    if (AUTO_UPLOAD) startUploads();
                 });
             } else {
                 // Handle single file drop
@@ -529,6 +531,7 @@
                     file.batchId = batchId;
                 });
                 updateFileList();
+                if (AUTO_UPLOAD) startUploads();
             }
         }
 
@@ -540,6 +543,7 @@
                 file.batchId = batchId;
             });
             updateFileList();
+            if (AUTO_UPLOAD) startUploads();
         }
 
         function handleFolders(e) {
@@ -552,6 +556,7 @@
                 file.batchId = batchId;
             });
             updateFileList();
+            if (AUTO_UPLOAD) startUploads();
         }
 
         function updateFileList() {
@@ -571,7 +576,7 @@
                 fileList.appendChild(fileItem);
             });
             
-            uploadButton.style.display = files.length > 0 ? 'block' : 'none';
+            uploadButton.style.display = (!AUTO_UPLOAD && files.length > 0) ? 'block' : 'none';
         }
 
         async function startUploads() {

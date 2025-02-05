@@ -1,4 +1,3 @@
-name: Dumb Drop
 services:
     dumbdrop:
         ports:
@@ -10,7 +9,9 @@ services:
             MAX_FILE_SIZE: 1024
             DUMBDROP_PIN: 123456
             # APPRISE_URL: ntfys://
+            # APPRISE_MESSAGE: New file uploaded - {filename} ({size}), Storage used {storage} 
+            # AUTO_UPLOAD: false
             APPRISE_MESSAGE: New file uploaded - {filename} ({size}), Storage used {storage} 
             APPRISE_SIZE_UNIT: auto
-        image: abite3/dumbdrop:latest
+        image: dumbwareio/dumbdrop:latest
         # build: .
