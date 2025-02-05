@@ -48,15 +48,7 @@
         <button id="uploadButton" class="upload-button" style="display: none;">Upload Files</button>
     </div>
 
-    <style>
-        .button-group {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-        }
-    </style>
-
-    <script>
+    <script defer>
         const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
         const MAX_RETRIES = 3;
         const RETRY_DELAY = 1000;
@@ -67,23 +59,178 @@
             return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         }
 
+        // Utility function to format file sizes
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
         class FileUploader {
             constructor(file, batchId) {
                 this.file = file;
                 this.batchId = batchId;
                 this.uploadId = null;
                 this.position = 0;
+                this.bytesReceived = 0;
                 this.progressElement = null;
                 this.retries = 0;
+                this.startTime = null;
+                this.lastUpdate = null;
+                this.lastBytes = 0;
+                this.speedSamples = [];
+                this.currentSpeed = 0;
+                this.speedUpdateTimer = null;
+                this.progressUpdateTimer = null;
+                this.waitingMessages = [
+                    "Preparing upload...",
+                    "Establishing connection...",
+                    "Starting transfer...",
+                    "Waiting for first chunk..."
+                ];
+                this.waitingMessageIndex = 0;
+                this.waitingMessageInterval = null;
+                this.dotsCount = 1;
+                this.dotsIncreasing = true;
+            }
+
+            cycleWaitingMessage() {
+                if (!this.progressElement || !this.progressElement.infoSpan) return;
+
+                if (this.waitingMessageIndex < this.waitingMessages.length) {
+                    this.progressElement.infoSpan.textContent = this.waitingMessages[this.waitingMessageIndex];
+                    this.waitingMessageIndex++;
+                    
+                    // When we finish the initial messages, add a delay before switching to dot animation
+                    if (this.waitingMessageIndex >= this.waitingMessages.length) {
+                        clearInterval(this.waitingMessageInterval);
+                        // Keep the last message visible for 2 seconds before starting dot animation
+                        setTimeout(() => {
+                            this.waitingMessageInterval = setInterval(() => this.cycleWaitingMessage(), 500);
+                        }, 2000);
+                    }
+                } else {
+                    // Create the dots string
+                    const dots = '.'.repeat(this.dotsCount);
+                    this.progressElement.infoSpan.textContent = `Still working${dots}`;
+                    
+                    // Update dots count
+                    if (this.dotsIncreasing) {
+                        this.dotsCount++;
+                        if (this.dotsCount > 6) {
+                            this.dotsCount = 1;
+                        }
+                    }
+                }
+            }
+
+            startWaitingMessages() {
+                if (this.waitingMessageInterval) {
+                    clearInterval(this.waitingMessageInterval);
+                }
+                // Start with 2 second interval for main messages
+                this.waitingMessageInterval = setInterval(() => this.cycleWaitingMessage(), 2000);
+                this.cycleWaitingMessage(); // Show first message immediately
+            }
+
+            stopWaitingMessages() {
+                if (this.waitingMessageInterval) {
+                    clearInterval(this.waitingMessageInterval);
+                    this.waitingMessageInterval = null;
+                }
+            }
+
+            calculateSpeed(bytesReceived) {
+                const now = Date.now();
+                
+                // Only calculate speed if at least 1 second has passed since last update
+                if (!this.lastUpdate || (now - this.lastUpdate) >= 1000) {
+                    if (this.lastUpdate) {
+                        const timeDiff = (now - this.lastUpdate) / 1000; // Convert to seconds
+                        const bytesDiff = bytesReceived - this.lastBytes;
+                        const instantSpeed = bytesDiff / timeDiff; // Bytes per second
+
+                        // Keep last 3 samples for smoother average
+                        this.speedSamples.push(instantSpeed);
+                        if (this.speedSamples.length > 3) {
+                            this.speedSamples.shift();
+                        }
+
+                        // Calculate weighted moving average with more weight on recent samples
+                        const weights = [0.5, 0.3, 0.2];
+                        const samples = this.speedSamples.slice().reverse(); // Most recent first
+                        this.currentSpeed = samples.reduce((acc, speed, i) => {
+                            return acc + (speed * (weights[i] || 0));
+                        }, 0);
+                    }
+                    this.lastUpdate = now;
+                    this.lastBytes = bytesReceived;
+                }
+
+                return this.currentSpeed;
+            }
+
+            formatSpeed(bytesPerSecond) {
+                const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+                let value = bytesPerSecond;
+                let unitIndex = 0;
+
+                while (value >= 1024 && unitIndex < units.length - 1) {
+                    value /= 1024;
+                    unitIndex++;
+                }
+
+                return `${value.toFixed(1)} ${units[unitIndex]}`;
+            }
+
+            calculateTimeRemaining(bytesReceived, speed) {
+                if (speed === 0) return 'calculating...';
+                const bytesRemaining = this.file.size - bytesReceived;
+                const secondsRemaining = bytesRemaining / speed;
+
+                if (secondsRemaining < 60) {
+                    return `${Math.ceil(secondsRemaining)}s`;
+                } else if (secondsRemaining < 3600) {
+                    return `${Math.ceil(secondsRemaining / 60)}m`;
+                } else {
+                    return `${Math.ceil(secondsRemaining / 3600)}h`;
+                }
             }
 
             async start() {
                 try {
+                    this.startTime = Date.now();
+                    // Initialize speed update timer
+                    this.speedUpdateTimer = setInterval(() => {
+                        if (this.bytesReceived > 0) {
+                            this.calculateSpeed(this.bytesReceived);
+                        }
+                    }, 1000);
+
+                    // Add progress update timer for more frequent UI updates
+                    this.progressUpdateTimer = setInterval(() => {
+                        if (this.bytesReceived > 0) {
+                            const progress = (this.bytesReceived / this.file.size) * 100;
+                            this.updateProgress(progress);
+                        }
+                    }, 200); // Update every 200ms
+                    
                     await this.initUpload();
                     await this.uploadChunks();
+                    
+                    // Clear the timers when upload is complete
+                    this.clearTimers();
                     return true;
                 } catch (error) {
+                    this.clearTimers();
                     console.error('Upload failed:', error);
+                    if (this.progressElement) {
+                        this.progressElement.infoSpan.textContent = `Error: ${error.message}`;
+                        this.progressElement.infoSpan.style.color = 'var(--danger-color)';
+                    }
+                    this.stopWaitingMessages();
                     return false;
                 }
             }
@@ -142,16 +289,19 @@
             }
 
             async uploadChunk(chunk) {
+                const controller = new AbortController();
                 const response = await fetch(`/upload/chunk/${this.uploadId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/octet-stream'
                     },
-                    body: chunk
+                    body: chunk,
+                    signal: controller.signal
                 });
 
                 if (!response.ok) throw new Error('Chunk upload failed');
                 const data = await response.json();
+                this.bytesReceived = Math.floor((data.progress / 100) * this.file.size);
                 this.updateProgress(data.progress);
             }
 
@@ -161,10 +311,15 @@
                 
                 const label = document.createElement('div');
                 label.className = 'progress-label';
+
+                const pathSpan = document.createElement('span');
+                pathSpan.className = 'progress-path';
                 const displayPath = this.file.relativePath ? 
-                    `📁 ${this.file.relativePath.split('/')[0]}/` : 
+                    `📁 ${this.file.relativePath}${this.file.name}` : 
                     `📄 ${this.file.name}`;
-                label.textContent = displayPath;
+                pathSpan.textContent = displayPath;
+                
+                label.appendChild(pathSpan);
 
                 const progress = document.createElement('div');
                 progress.className = 'progress';
@@ -173,22 +328,71 @@
                 bar.className = 'progress-bar';
                 bar.style.width = '0%';
 
+                const statusDiv = document.createElement('div');
+                statusDiv.className = 'progress-status';
+
+                const infoSpan = document.createElement('div');
+                infoSpan.className = 'progress-info';
+
+                const details = document.createElement('div');
+                details.className = 'progress-details';
+
+                statusDiv.appendChild(infoSpan);
+                statusDiv.appendChild(details);
+
                 progress.appendChild(bar);
                 container.appendChild(label);
                 container.appendChild(progress);
+                container.appendChild(statusDiv);
                 
                 document.getElementById('uploadProgress').appendChild(container);
-                this.progressElement = { container, bar };
+                this.progressElement = { container, bar, infoSpan, details };
+                
+                // Start cycling waiting messages
+                this.startWaitingMessages();
             }
 
             updateProgress(percent) {
                 if (this.progressElement) {
-                    this.progressElement.bar.style.width = `${percent}%`;
+                    // Use the current speed value instead of calculating it every time
+                    const speed = this.currentSpeed;
+                    
+                    // Stop waiting messages once we start receiving data
+                    if (this.bytesReceived > 0) {
+                        this.stopWaitingMessages();
+                    }
+                    
+                    const timeRemaining = this.calculateTimeRemaining(this.bytesReceived, speed);
+                    
+                    this.progressElement.bar.style.width = `${percent.toFixed(1)}%`;
+                    
+                    // Only show speed and time if we've received data
+                    if (this.bytesReceived > 0) {
+                        this.progressElement.infoSpan.textContent = `${this.formatSpeed(speed)} · ${timeRemaining}`;
+                    }
+                    
+                    // Update details with progress and file size
+                    this.progressElement.details.textContent = 
+                        `${formatFileSize(this.bytesReceived)} of ${formatFileSize(this.file.size)} (${percent.toFixed(1)}%)`;
+
                     if (percent === 100) {
+                        this.stopWaitingMessages();
+                        this.clearTimers();
                         setTimeout(() => {
                             this.progressElement.container.remove();
                         }, 1000);
                     }
+                }
+            }
+
+            clearTimers() {
+                if (this.speedUpdateTimer) {
+                    clearInterval(this.speedUpdateTimer);
+                    this.speedUpdateTimer = null;
+                }
+                if (this.progressUpdateTimer) {
+                    clearInterval(this.progressUpdateTimer);
+                    this.progressUpdateTimer = null;
                 }
             }
         }
@@ -373,14 +577,6 @@
             });
             
             uploadButton.style.display = (!AUTO_UPLOAD && files.length > 0) ? 'block' : 'none';
-        }
-
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
         async function startUploads() {
