@@ -616,9 +616,10 @@ async function sendNotification(filename, fileSize) {
             .replace('{size}', formattedSize)
             .replace('{storage}', totalStorage);
 
-        // Use array syntax to avoid shell interpretation
-        await execAsync(['apprise', APPRISE_URL, '-b', message], {
-            shell: false
+        // Use a string command instead of an array
+        const command = `apprise ${APPRISE_URL} -b "${message}"`;
+        await execAsync(command, {
+            shell: true
         });
         
         log.info(`Notification sent for: ${sanitizedFilename} (${formattedSize}, Total storage: ${totalStorage})`);
