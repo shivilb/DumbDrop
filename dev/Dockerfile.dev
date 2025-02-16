@@ -21,7 +21,6 @@ FROM base as deps
 
 COPY package*.json ./
 RUN npm ci --only=production && \
-    # Remove npm cache
     npm cache clean --force
 
 # Development stage
@@ -38,27 +37,10 @@ RUN mkdir -p uploads local_uploads
 # Copy source with specific paths to avoid unnecessary files
 COPY src/ ./src/
 COPY public/ ./public/
-COPY __tests__/ ./__tests__/
 COPY dev/ ./dev/
 COPY .eslintrc.json .eslintignore ./
 
 # Expose port
 EXPOSE 3000
 
-CMD ["npm", "run", "dev"]
-
-# Production stage
-FROM deps as production
-ENV NODE_ENV=production
-
-# Create upload directory
-RUN mkdir -p uploads
-
-# Copy only necessary source files
-COPY src/ ./src/
-COPY public/ ./public/
-
-# Expose port
-EXPOSE 3000
-
-CMD ["npm", "start"]
+CMD ["npm", "run", "dev"] 
