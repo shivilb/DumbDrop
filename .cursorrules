@@ -74,21 +74,6 @@
   - /uploads (production)
   - /local_uploads (local development)
 
-# Testing
-- Tests are mandatory for all new features
-- Test files location:
-  - Unit tests: __tests__/unit/
-  - Integration tests: __tests__/integration/
-  - E2E tests: __tests__/e2e/
-- Test naming convention:
-  - Unit tests: [feature].test.js
-  - Integration tests: [feature].integration.test.js
-  - E2E tests: [feature].e2e.test.js
-- Test coverage requirements:
-  - Minimum 80% coverage for new features
-  - Must include happy path and error cases
-  - API endpoints must have integration tests
-
 # Documentation
 - Main README.md in root focuses on production deployment
 - Development documentation in /dev/README.md
