@@ -125,7 +125,7 @@
         // Handle form submission
         const verifyPin = async (pin) => {
             try {
-                const response = await fetch('/api/verify-pin', {
+                const response = await fetch('/api/auth/verify-pin', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ pin })
@@ -208,7 +208,7 @@
         };
 
         // Check PIN length and initialize
-        fetch('/api/pin-required')
+        fetch('/api/auth/pin-required')
             .then(response => response.json())
             .then(data => {
                 if (data.required) {
