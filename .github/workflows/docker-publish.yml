@@ -37,7 +37,7 @@ jobs:
           # image name is dumbdrop, in the docker user's repo
           # this allows the push to work in forks
           images: |
-            name=${{ secrets.DOCKER_USERNAME }}/dumbdrop
+            nname=dumbwareio/dumbdrop
           tags: |
             # the semantic versioning tags add "latest" when a version tag is present
             # but since version tags aren't being used (yet?) let's add "latest" anyway
