@@ -8,6 +8,7 @@ const { app, initialize, config } = require('./app');
 const logger = require('./utils/logger');
 const fs = require('fs');
 const { executeCleanup } = require('./utils/cleanup');
+const { generatePWAManifest } = require('./scripts/pwa-manifest-generator')
 
 // Track open connections
 const connections = new Set();
@@ -39,6 +40,9 @@ async function startServer() {
         }
       }
     });
+
+    // Dynamically generate PWA manifest into public folder
+    generatePWAManifest();
 
     // Track new connections
     server.on('connection', (connection) => {

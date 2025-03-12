@@ -196,6 +196,9 @@ Thumbs.db
 !uploads/.gitkeep
 !local_uploads/.gitkeep
 
+# Generated PWA Files
+/public/*manifest.json
+
 # Misc
 *.log
 .env.*
