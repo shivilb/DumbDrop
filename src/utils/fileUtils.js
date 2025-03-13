@@ -160,10 +160,16 @@ async function getUniqueFolderPath(folderPath) {
   return finalPath;
 }
 
+function sanitizeFilename(fileName) {
+  const sanitized = fileName.replace(/[<>:"/\\|?*]+/g, '').replace(/["`$|;&<>]/g, '');
+  return sanitized;
+}
+
 module.exports = {
   formatFileSize,
   calculateDirectorySize,
   ensureDirectoryExists,
   getUniqueFilePath,
-  getUniqueFolderPath
+  getUniqueFolderPath,
+  sanitizeFilename
 }; 

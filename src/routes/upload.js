@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { config } = require('../config');
 const logger = require('../utils/logger');
-const { getUniqueFilePath, getUniqueFolderPath } = require('../utils/fileUtils');
+const { getUniqueFilePath, getUniqueFolderPath, sanitizeFilename } = require('../utils/fileUtils');
 const { sendNotification } = require('../services/notifications');
 const fs = require('fs');
 const { cleanupIncompleteUploads } = require('../utils/cleanup');
@@ -175,7 +175,8 @@ router.post('/init', async (req, res) => {
     batchActivity.set(batchId, Date.now());
 
     // Sanitize filename and convert to forward slashes
-    const safeFilename = path.normalize(filename)
+    const sanitizedFilename = sanitizeFilename(filename);
+    const safeFilename = path.normalize(sanitizedFilename)
       .replace(/^(\.\.(\/|\\|$))+/, '')
       .replace(/\\/g, '/')
       .replace(/^\/+/, ''); // Remove leading slashes
@@ -264,7 +265,7 @@ router.post('/init', async (req, res) => {
         upload.writeStream.end();
         uploads.delete(uploadId);
         logger.success(`Completed zero-byte file upload: ${upload.safeFilename}`);
-        await sendNotification(upload.safeFilename, 0, config);
+        sendNotification(upload.safeFilename, 0, config);
       }
 
       // Send response
@@ -360,7 +361,7 @@ router.post('/chunk/:uploadId', express.raw({
       }
       
       // Send notification
-      await sendNotification(upload.safeFilename, upload.fileSize, config);
+      sendNotification(upload.safeFilename, upload.fileSize, config);
       logUploadState('After Upload Complete');
     }
 

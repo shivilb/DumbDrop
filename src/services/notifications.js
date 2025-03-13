@@ -4,12 +4,9 @@
  * Handles message formatting and notification delivery.
  */
 
-const { exec } = require('child_process');
-const util = require('util');
-const { formatFileSize, calculateDirectorySize } = require('../utils/fileUtils');
+const { spawn } = require('child_process');
+const { formatFileSize, calculateDirectorySize, sanitizeFilename } = require('../utils/fileUtils');
 const logger = require('../utils/logger');
-
-const execAsync = util.promisify(exec);
 
 /**
  * Send a notification using Apprise
@@ -19,34 +16,56 @@ const execAsync = util.promisify(exec);
  * @returns {Promise<void>}
  */
 async function sendNotification(filename, fileSize, config) {
-  const { APPRISE_URL, APPRISE_MESSAGE, APPRISE_SIZE_UNIT, uploadDir } = config;
-  
-  if (!APPRISE_URL) {
-    return;
-  }
+    const { appriseUrl, appriseMessage, appriseSizeUnit, uploadDir } = config;
 
-  try {
-    const formattedSize = formatFileSize(fileSize, APPRISE_SIZE_UNIT);
-    const dirSize = await calculateDirectorySize(uploadDir);
-    const totalStorage = formatFileSize(dirSize);
-    
-    // Sanitize the message components
-    const sanitizedFilename = JSON.stringify(filename).slice(1, -1);
-    const message = APPRISE_MESSAGE
-      .replace('{filename}', sanitizedFilename)
-      .replace('{size}', formattedSize)
-      .replace('{storage}', totalStorage);
+    console.debug("NOTIFICATIONS CONFIG:", filename, fileSize, config);
+    if (!appriseUrl) {
+        return;
+    }
 
-    // Use string command for better escaping
-    const command = `apprise ${APPRISE_URL} -b "${message}"`;
-    await execAsync(command, { shell: true });
-    
-    logger.info(`Notification sent for: ${sanitizedFilename} (${formattedSize}, Total storage: ${totalStorage})`);
-  } catch (err) {
-    logger.error(`Failed to send notification: ${err.message}`);
-  }
+    try {
+        const formattedSize = formatFileSize(fileSize, appriseSizeUnit);
+        const dirSize = await calculateDirectorySize(uploadDir);
+        const totalStorage = formatFileSize(dirSize);
+
+        // Sanitize the filename to remove any special characters that could cause issues
+        const sanitizedFilename = sanitizeFilename(filename); // apply sanitization of filename again (in case)
+        
+        // Construct the notification message by replacing placeholders
+        const message = appriseMessage
+            .replace('{filename}', sanitizedFilename)
+            .replace('{size}', formattedSize)
+            .replace('{storage}', totalStorage);
+
+        await new Promise((resolve, reject) => {
+            const appriseProcess = spawn('apprise', [appriseUrl, '-b', message]);
+
+            appriseProcess.stdout.on('data', (data) => {
+                logger.info(`Apprise Output: ${data.toString().trim()}`);
+            });
+
+            appriseProcess.stderr.on('data', (data) => {
+                logger.error(`Apprise Error: ${data.toString().trim()}`);
+            });
+
+            appriseProcess.on('close', (code) => {
+                if (code === 0) {
+                    logger.info(`Notification sent for: ${sanitizedFilename} (${formattedSize}, Total storage: ${totalStorage})`);
+                    resolve();
+                } else {
+                    reject(new Error(`Apprise process exited with code ${code}`));
+                }
+            });
+
+            appriseProcess.on('error', (err) => {
+                reject(new Error(`Apprise process failed to start: ${err.message}`));
+            });
+        });
+    } catch (err) {
+        logger.error(`Failed to send notification: ${err.message}`);
+    }
 }
 
 module.exports = {
-  sendNotification
-}; 
+    sendNotification,
+};

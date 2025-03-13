@@ -20,6 +20,9 @@ services:
       - MAX_FILE_SIZE=1024
       - AUTO_UPLOAD=false
       - DUMBDROP_TITLE=DumbDrop-Dev
+      # - APPRISE_URL=ntfy://dumbdrop-test
+      # - APPRISE_MESSAGE=[DEV] New file uploaded - {filename} ({size}), Storage used {storage}
+      # - APPRISE_SIZE_UNIT=auto
     command: npm run dev
     restart: unless-stopped
     # Enable container debugging if needed
