@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { config } = require('../config');
 const logger = require('../utils/logger');
-const { getUniqueFilePath, getUniqueFolderPath, sanitizeFilename } = require('../utils/fileUtils');
+const { getUniqueFilePath, getUniqueFolderPath, sanitizeFilename, sanitizePathPreserveDirs } = require('../utils/fileUtils');
 const { sendNotification } = require('../services/notifications');
 const fs = require('fs');
 const { cleanupIncompleteUploads } = require('../utils/cleanup');
@@ -174,8 +174,8 @@ router.post('/init', async (req, res) => {
     // Update batch activity
     batchActivity.set(batchId, Date.now());
 
-    // Sanitize filename and convert to forward slashes
-    const sanitizedFilename = sanitizeFilename(filename);
+    // Sanitize filename and convert to forward slashes, preserving directory structure
+    const sanitizedFilename = sanitizePathPreserveDirs(filename);
     const safeFilename = path.normalize(sanitizedFilename)
       .replace(/^(\.\.(\/|\\|$))+/, '')
       .replace(/\\/g, '/')
@@ -205,35 +205,36 @@ router.post('/init', async (req, res) => {
       const pathParts = safeFilename.split('/').filter(Boolean); // Remove empty parts
       
       if (pathParts.length > 1) {
-        // Handle files within folders
+        // The first part is the root folder name from the client
         const originalFolderName = pathParts[0];
-        const folderPath = path.join(config.uploadDir, originalFolderName);
+        // Always use a consistent mapping for this batch to avoid collisions
+        // This ensures all files in the batch go into the same (possibly renamed) root folder
         let newFolderName = folderMappings.get(`${originalFolderName}-${batchId}`);
-        
+        const folderPath = path.join(config.uploadDir, newFolderName || originalFolderName);
         if (!newFolderName) {
           try {
-            // First ensure parent directories exist
+            // Ensure parent directories exist
             await fs.promises.mkdir(path.dirname(folderPath), { recursive: true });
-            // Then try to create the target folder
+            // Try to create the target folder
             await fs.promises.mkdir(folderPath, { recursive: false });
             newFolderName = originalFolderName;
           } catch (err) {
             if (err.code === 'EEXIST') {
+              // If the folder exists, generate a unique folder name for this batch
               const uniqueFolderPath = await getUniqueFolderPath(folderPath);
               newFolderName = path.basename(uniqueFolderPath);
-              logger.info(`Folder "${originalFolderName}" exists, using "${newFolderName}"`);
+              logger.info(`Folder "${originalFolderName}" exists, using "${newFolderName}" for batch ${batchId}`);
             } else {
               throw err;
             }
           }
-          
+          // Store the mapping for this batch
           folderMappings.set(`${originalFolderName}-${batchId}`, newFolderName);
         }
-
+        // Always apply the mapping for this batch
         pathParts[0] = newFolderName;
         filePath = path.join(config.uploadDir, ...pathParts);
-        
-        // Ensure all parent directories exist
+        // Ensure all parent directories exist for the file
         await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
       }
 
