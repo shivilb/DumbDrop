@@ -516,6 +516,15 @@
             // Reset the input to allow selecting the same folder again
             const input = e.target;
             files = [...input.files];
+            // Check for webkitRelativePath support
+            const missingRelPath = files.some(f => !('webkitRelativePath' in f) || !f.webkitRelativePath);
+            if (missingRelPath) {
+                alert('Your browser does not support folder uploads with structure. Please use a modern browser like Chrome or Edge.');
+                files = [];
+                updateFileList();
+                input.value = '';
+                return;
+            }
             console.log('Folder selection files:', files.map(f => ({
                 name: f.name,
                 path: f.webkitRelativePath,

@@ -165,11 +165,20 @@ function sanitizeFilename(fileName) {
   return sanitized;
 }
 
+function sanitizePathPreserveDirs(filePath) {
+  // Split on forward slashes, sanitize each part, and rejoin
+  return filePath
+    .split('/')
+    .map(part => sanitizeFilename(part))
+    .join('/');
+}
+
 module.exports = {
   formatFileSize,
   calculateDirectorySize,
   ensureDirectoryExists,
   getUniqueFilePath,
   getUniqueFolderPath,
-  sanitizeFilename
+  sanitizeFilename,
+  sanitizePathPreserveDirs
 }; 
