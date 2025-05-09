@@ -52,6 +52,7 @@ services:
             # Upload without clicking button
             AUTO_UPLOAD: false
             # The base URL for the application
+            # You must update this to the url you use to access your site
             BASE_URL: http://localhost:3000
 ```
 Then run:
