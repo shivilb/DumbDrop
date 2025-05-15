@@ -88,6 +88,17 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
+        // Security helper to escape HTML to prevent XSS
+        function escapeHtml(text) {
+            if (!text) return '';
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
         class FileUploader {
             constructor(file, batchId) {
                 this.file = file;
@@ -288,7 +299,8 @@
                 
                 const label = document.createElement('div');
                 label.className = 'progress-label';
-                label.textContent = this.file.webkitRelativePath || this.file.name;
+                const fileName = this.file.webkitRelativePath || this.file.name;
+                label.textContent = escapeHtml(fileName);
 
                 const progress = document.createElement('div');
                 progress.className = 'progress';
@@ -809,7 +821,7 @@
                     return relativePath.split('/').length === 1;
                 }).length;
                 
-                folderItem.innerHTML = `📁 ${folder.name}/ (${formatFileSize(folder.size)} - ${totalFiles} files)`;
+                folderItem.textContent = `📁 ${escapeHtml(folder.name)}/ (${formatFileSize(folder.size)} - ${totalFiles} files)`;
                 
                 // Add files in folder
                 const filesList = document.createElement('div');
@@ -824,7 +836,7 @@
                         const fileItem = document.createElement('div');
                         fileItem.className = 'file-item nested';
                         const relativePath = file.webkitRelativePath.substring(folder.name.length + 1);
-                        fileItem.innerHTML = `📄 ${relativePath} (${formatFileSize(file.size)})`;
+                        fileItem.textContent = `📄 ${escapeHtml(relativePath)} (${formatFileSize(file.size)})`;
                         filesList.appendChild(fileItem);
                     });
                 
@@ -846,7 +858,7 @@
                 .forEach(file => {
                     const fileItem = document.createElement('div');
                     fileItem.className = 'file-item';
-                    fileItem.innerHTML = `📄 ${file.name} (${formatFileSize(file.size)})`;
+                    fileItem.textContent = `📄 ${escapeHtml(file.name)} (${formatFileSize(file.size)})`;
                     fileList.appendChild(fileItem);
                 });
             
